@@ -22,6 +22,7 @@ jobs:
           rm -f package-lock.json
           npm install
           npm run build
+          touch dist/.nojekyll
 
       - name: Deploy
         uses: JamesIves/github-pages-deploy-action@v4
