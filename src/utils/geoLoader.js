@@ -8,16 +8,9 @@ export async function loadChinaGeoJSON() {
 }
 
 export const loadProvinceGeoJSON = async (adcode) => {
-  try {
-    // 优先加载本地数据
-    // Vite 支持动态导入
-    const module = await import(`../data/provinces/${adcode}.json`)
-    return module.default
-  } catch (error) {
-    console.warn(`本地未找到 ${adcode} 数据，尝试在线加载...`, error)
-    try {
+   try {
       // 使用阿里云 DataV 的 GeoJSON 服务
-      const url = `https://geo.datav.aliyun.com/areas_v3/bound/geojson?code=${adcode}_full`
+      const url = `/cities/${adcode}.json`
       const response = await fetch(url)
       if (!response.ok) throw new Error('Network response was not ok')
       const data = await response.json()
@@ -26,18 +19,12 @@ export const loadProvinceGeoJSON = async (adcode) => {
       console.error(`Error loading province ${adcode} GeoJSON:`, onlineError)
       return null
     }
-  }
 }
 
 export const loadCityGeoJSON = async (adcode) => {
-  try {
-    // 优先加载本地数据
-    const module = await import(`../data/cities/${adcode}.json`)
-    return module.default
-  } catch (error) {
-    console.warn(`本地未找到市级 ${adcode} 数据，尝试在线加载...`)
-    try {
-      const url = `https://geo.datav.aliyun.com/areas_v3/bound/geojson?code=${adcode}_full`
+try {
+      // 使用相对路径，触发 vite.config.js 中的代理
+      const url = `/cities/${adcode}.json`
       const response = await fetch(url)
       if (!response.ok) throw new Error('Network response was not ok')
       const data = await response.json()
@@ -46,5 +33,4 @@ export const loadCityGeoJSON = async (adcode) => {
       console.error(`Error loading city ${adcode} GeoJSON:`, onlineError)
       return null
     }
-  }
 }
