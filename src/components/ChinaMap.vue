@@ -31,7 +31,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js'
 import gsap from 'gsap'
-import { loadChinaGeoJSON, loadProvinceGeoJSON } from '../utils/geoLoader'
+import { loadChinaGeoJSON, loadProvinceGeoJSON, loadCityGeoJSON } from '../utils/geoLoader'
 import { getAdcode } from '../utils/adcodes'
 import { createSideMaterial, createBarMaterial, createGroundMaterial, createTerrainMaterial, createGearMaterial } from '../shaders/mapEffects.js'
 import { getBarData } from '../data/barData.js'
@@ -423,9 +423,8 @@ const onProvinceChange = async () => {
   console.log(`切换省份: ${selectedProvince.value}, adcode: ${adcode}`)
   
   try {
-    const res = await fetch(`https://geo.datav.aliyun.com/areas_v3/bound/geojson?code=${adcode}_full`)
-    if (!res.ok) throw new Error('Province GeoJSON fetch failed')
-    const provinceData = await res.json()
+    const provinceData = await loadProvinceGeoJSON(adcode)
+    if (!provinceData) throw new Error('Province GeoJSON load failed')
     
     // 更新 mapLevel
     mapLevel.value = 'province'
@@ -522,9 +521,8 @@ const onCityChange = async () => {
   console.log(`切换市: ${city.name}, adcode: ${city.adcode}`)
   
   try {
-    const res = await fetch(`https://geo.datav.aliyun.com/areas_v3/bound/geojson?code=${city.adcode}_full`)
-    if (!res.ok) throw new Error('City GeoJSON fetch failed')
-    const cityData = await res.json()
+    const cityData = await loadCityGeoJSON(city.adcode)
+    if (!cityData) throw new Error('City GeoJSON load failed')
     
     mapLevel.value = 'city'
     
