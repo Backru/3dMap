@@ -26,4 +26,3 @@ jobs:
         with:
           folder: dist # 构建输出目录
           branch: gh-pages # 部署到的分支
-          github_token: ${{ secrets.GITHUB_TOKEN }}
