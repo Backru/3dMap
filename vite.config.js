@@ -8,7 +8,7 @@ export default defineConfig({
     open: true,
     proxy: {
       '/cities': {
-        target: 'http://cdf.defuy.cn:10889/cities',
+        target: 'http://cdf.map.defuy.cn:10888',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/cities/, '')
       }
