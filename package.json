@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@types/three": "^0.158.3",
+    "autofit.js": "^3.2.8",
     "echarts": "^5.4.3",
     "gsap": "^3.13.0",
     "three": "^0.158.0",
