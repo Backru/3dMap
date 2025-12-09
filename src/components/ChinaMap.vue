@@ -5,6 +5,7 @@
       <button @click="toggleSideEffect" :class="{ active: showSideEffect }">侧边光效</button>
       <button @click="toggleGroundEffect" :class="{ active: showGroundEffect }">地面扩散</button>
       <button @click="toggleGearEffect" :class="{ active: showGear }">光圈特效</button>
+      <button @click="toggleFlightRoutes" :class="{ active: showFlightRoutes }">飞机航线</button>
       <button @click="toggleGrid" :class="{ active: showGrid }">辅助网格</button>
       <button @click="togglePanMode" :class="{ active: isPanMode }">{{ isPanMode ? '拖动模式' : '旋转模式' }}</button>
       
@@ -59,6 +60,11 @@ const showGroundEffect = ref(true)
 const showGrid = ref(true)
 const showGear = ref(true)
 const isPanMode = ref(true) // 默认开启平移模式
+const showFlightRoutes = ref(false) // 飞机航线开关 - 默认关闭
+
+// 飞机航线相关
+let flightRoutesGroup = null
+const flightPlanes = [] // 存储所有飞机对象
 
 // 初始化 Three.js
 const initThree = () => {
@@ -99,10 +105,34 @@ const initThree = () => {
   // 标签渲染器
   labelRenderer = new CSS2DRenderer()
   labelRenderer.setSize(width, height)
+  labelRenderer.domElement.className = 'css2d-container'
   labelRenderer.domElement.style.position = 'absolute'
   labelRenderer.domElement.style.top = '0px'
+  labelRenderer.domElement.style.left = '0px'
   labelRenderer.domElement.style.pointerEvents = 'none' // 允许点击穿透
+  labelRenderer.domElement.style.zIndex = '10' // 提高 z-index 确保在最上层
+  labelRenderer.domElement.style.width = '100%'
+  labelRenderer.domElement.style.height = '100%'
+  labelRenderer.domElement.style.overflow = 'visible'
   mapContainer.value.appendChild(labelRenderer.domElement)
+  
+  console.log('labelRenderer 已创建:', labelRenderer.domElement)
+  console.log('labelRenderer 容器尺寸:', width, height)
+  
+  // 添加调试信息：检查 labelRenderer 是否正确渲染
+  setTimeout(() => {
+    console.log('labelRenderer 子元素数量:', labelRenderer.domElement.children.length)
+    if (labelRenderer.domElement.children.length > 0) {
+      console.log('第一个子元素:', labelRenderer.domElement.children[0])
+      // 查找飞机图标元素
+      const planeIcons = labelRenderer.domElement.querySelectorAll('.plane-icon')
+      console.log('找到飞机图标数量:', planeIcons.length)
+      if (planeIcons.length > 0) {
+        console.log('第一个飞机图标:', planeIcons[0])
+        console.log('飞机图标的父元素 style:', planeIcons[0].parentElement?.style.cssText)
+      }
+    }
+  }, 2000)
 
   // 控制器
   controls = new OrbitControls(camera, renderer.domElement)
@@ -318,6 +348,7 @@ const createMap = async () => {
   renderBarCharts(mapGroup)
   createGroundEffect()
   createGearEffect()
+  createFlightRoutes()
 }
 
 // 鼠标移动事件
@@ -843,6 +874,220 @@ const createGearEffect = () => {
   scene.add(gearMesh)
 }
 
+// 创建飞机航线
+const createFlightRoutes = () => {
+  flightRoutesGroup = new THREE.Group()
+  flightRoutesGroup.name = 'flightRoutes'
+  
+  // 直接从地图中获取省份的中心坐标（已经转换好的场景坐标）
+  const getCityCoords = (provinceName) => {
+    if (!mapGroup) return null
+    
+    // 查找省份组
+    const provinceGroup = mapGroup.children.find(child => child.name === provinceName)
+    if (!provinceGroup || !provinceGroup.userData.center) return null
+    
+    const center = provinceGroup.userData.center
+    return { x: center.x, z: center.z }
+  }
+  
+  // 定义航线（起点 -> 终点）- 选择多条不同方向的航线
+  const routes = [
+    { from: '北京市', to: '湖南省', color: 0x00ffff },      // 北到南
+    { from: '江苏省', to: '陕西省', color: 0xff6b35 },      // 东到西
+    { from: '黑龙江省', to: '广东省', color: 0x00ff88 },    // 东北到南
+    { from: '上海市', to: '四川省', color: 0xffaa00 },      // 东到西南
+    { from: '辽宁省', to: '云南省', color: 0xff00ff },      // 东北到西南
+    { from: '山东省', to: '重庆市', color: 0x00aaff }       // 东到西
+  ]
+  
+  routes.forEach((route, index) => {
+    const from = getCityCoords(route.from)
+    const to = getCityCoords(route.to)
+    
+    if (!from || !to) return
+    
+    // 创建航线路径（使用贝塞尔曲线模拟飞行弧线）
+    const start = new THREE.Vector3(from.x, 5, from.z)
+    const end = new THREE.Vector3(to.x, 5, to.z)
+    
+    // 计算中间控制点（向上抬高，形成弧线）
+    const midPoint = new THREE.Vector3(
+      (start.x + end.x) / 2,
+      15 + Math.random() * 5, // 随机高度
+      (start.z + end.z) / 2
+    )
+    
+    // 创建二次贝塞尔曲线
+    const curve = new THREE.QuadraticBezierCurve3(start, midPoint, end)
+    
+    // 绘制航线
+    const points = curve.getPoints(50)
+    const lineGeometry = new THREE.BufferGeometry().setFromPoints(points)
+    
+    // 创建渐变材质的航线
+    const lineMaterial = new THREE.LineBasicMaterial({
+      color: route.color,
+      transparent: true,
+      opacity: 0.6,
+      linewidth: 2
+    })
+    
+    const line = new THREE.Line(lineGeometry, lineMaterial)
+    flightRoutesGroup.add(line)
+    
+    // 创建流动光效（使用粒子）
+    createFlowingParticles(curve, route.color)
+    
+    // 创建飞机模型
+    const plane = createPlane(route.color)
+    plane.userData.curve = curve
+    plane.userData.progress = Math.random() // 随机起始位置
+    plane.userData.speed = 0.0003 + Math.random() * 0.0002 // 随机速度
+    flightPlanes.push(plane)
+    flightRoutesGroup.add(plane)
+    
+    console.log(`创建飞机: ${route.from} -> ${route.to}, 颜色: ${route.color.toString(16)}`)
+  })
+  
+  flightRoutesGroup.visible = showFlightRoutes.value
+  scene.add(flightRoutesGroup)
+}
+
+// 创建飞机图标（使用 Canvas 绘制箭头形状）
+const createPlane = (color) => {
+  const planeGroup = new THREE.Group()
+  
+  // 转换颜色为 CSS 格式
+  const colorHex = '#' + color.toString(16).padStart(6, '0')
+  
+  console.log('创建飞机图标, 颜色:', colorHex)
+  
+  // 创建 Canvas 来绘制飞机图标
+  const canvas = document.createElement('canvas')
+  canvas.width = 128
+  canvas.height = 128
+  const ctx = canvas.getContext('2d')
+  
+  // 保存引用用于旋转
+  planeGroup.userData.canvas = canvas
+  planeGroup.userData.ctx = ctx
+  planeGroup.userData.colorHex = colorHex
+  
+  // 初始绘制（朝上）
+  drawPlaneIcon(ctx, colorHex, 0)
+  
+  // 创建纹理
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.needsUpdate = true
+  
+  // 创建 Sprite 材质
+  const spriteMaterial = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    opacity: 1,
+    depthTest: false,
+    depthWrite: false
+  })
+  
+  // 创建 Sprite
+  const sprite = new THREE.Sprite(spriteMaterial)
+  sprite.scale.set(3, 3, 1)
+  planeGroup.add(sprite)
+  
+  planeGroup.userData.sprite = sprite
+  planeGroup.userData.texture = texture
+  
+  console.log('飞机图标创建完成, Sprite:', sprite)
+  
+  // 添加光晕效果
+  const glowGeometry = new THREE.SphereGeometry(0.6, 16, 16)
+  const glowMaterial = new THREE.MeshBasicMaterial({
+    color: color,
+    transparent: true,
+    opacity: 0.3,
+    blending: THREE.AdditiveBlending
+  })
+  const glow = new THREE.Mesh(glowGeometry, glowMaterial)
+  planeGroup.add(glow)
+  
+  return planeGroup
+}
+
+// 绘制飞机图标的辅助函数
+const drawPlaneIcon = (ctx, colorHex, rotationRad) => {
+  // 清空 canvas
+  ctx.clearRect(0, 0, 128, 128)
+  
+  // 绘制光晕背景
+  const gradient = ctx.createRadialGradient(64, 64, 0, 64, 64, 64)
+  gradient.addColorStop(0, colorHex + '66')
+  gradient.addColorStop(0.5, colorHex + '33')
+  gradient.addColorStop(1, 'transparent')
+  ctx.fillStyle = gradient
+  ctx.fillRect(0, 0, 128, 128)
+  
+  // 保存上下文
+  ctx.save()
+  
+  // 移动到中心并旋转
+  ctx.translate(64, 64)
+  ctx.rotate(rotationRad)
+  
+  // 绘制三角形箭头（指向右侧，即0度方向）
+  ctx.beginPath()
+  ctx.moveTo(40, 0)      // 箭头尖端（右）
+  ctx.lineTo(-20, -20)   // 左上角
+  ctx.lineTo(-20, 20)    // 左下角
+  ctx.closePath()
+  
+  // 填充白色
+  ctx.fillStyle = '#ffffff'
+  ctx.fill()
+  
+  // 描边
+  ctx.strokeStyle = colorHex
+  ctx.lineWidth = 3
+  ctx.stroke()
+  
+  // 恢复上下文
+  ctx.restore()
+}
+
+// 创建流动粒子效果
+const createFlowingParticles = (curve, color) => {
+  const particleCount = 20
+  const points = curve.getPoints(particleCount)
+  
+  const geometry = new THREE.BufferGeometry().setFromPoints(points)
+  const material = new THREE.PointsMaterial({
+    color: color,
+    size: 0.3,
+    transparent: true,
+    opacity: 0.8,
+    blending: THREE.AdditiveBlending
+  })
+  
+  const particles = new THREE.Points(geometry, material)
+  flightRoutesGroup.add(particles)
+  
+  // 添加粒子动画数据
+  particles.userData.curve = curve
+  particles.userData.offset = Math.random()
+}
+
+// 切换飞机航线显示
+const toggleFlightRoutes = () => {
+  showFlightRoutes.value = !showFlightRoutes.value
+  if (flightRoutesGroup) {
+    flightRoutesGroup.visible = showFlightRoutes.value
+  }
+  // 同时控制飞机的显示
+  flightPlanes.forEach(plane => {
+    plane.visible = showFlightRoutes.value
+  })
+}
+
 // 动画循环
 const clock = new THREE.Clock()
 const animate = () => {
@@ -855,6 +1100,79 @@ const animate = () => {
   animatedUniforms.forEach(uniforms => {
     uniforms.uTime.value = time
   })
+  
+  // 更新飞机位置
+  flightPlanes.forEach((plane, index) => {
+    if (plane.userData.curve) {
+      plane.userData.progress += plane.userData.speed
+      if (plane.userData.progress > 1) {
+        plane.userData.progress = 0
+      }
+      
+      // 获取当前位置
+      const point = plane.userData.curve.getPoint(plane.userData.progress)
+      plane.position.copy(point)
+      
+      // 获取切线方向，让飞机朝向飞行方向
+      const tangent = plane.userData.curve.getTangent(plane.userData.progress)
+      
+      // 更新 Sprite 的旋转（重新绘制 canvas）
+      if (plane.userData.canvas && plane.userData.ctx && plane.userData.colorHex) {
+        const ctx = plane.userData.ctx
+        const colorHex = plane.userData.colorHex
+        
+        // 计算旋转角度 - 让飞机机头指向飞行方向
+        // 
+        // 三角形箭头默认指向右侧（0度），直接使用飞行角度
+        const flightAngle = Math.atan2(-tangent.z, tangent.x)
+        const rotationRad = -flightAngle  // 不需要偏移
+        
+        // 调试：偶尔输出角度信息
+        if (Math.random() < 0.005) {
+          console.log(`飞机 ${index}:`, {
+            tangent: { x: tangent.x.toFixed(2), z: tangent.z.toFixed(2) },
+            flightAngle: (flightAngle * 180 / Math.PI).toFixed(1) + '°',
+            rotationRad: (rotationRad * 180 / Math.PI).toFixed(1) + '°'
+          })
+        }
+        
+        // 重新绘制飞机图标
+        drawPlaneIcon(ctx, colorHex, rotationRad)
+        
+        // 更新纹理
+        if (plane.userData.texture) {
+          plane.userData.texture.needsUpdate = true
+        }
+      }
+      
+      // 根据高度变化调整飞机俯仰角（可选）
+      if (plane.userData.progress < 0.99) {
+        const nextPoint = plane.userData.curve.getPoint(plane.userData.progress + 0.01)
+        const heightDiff = nextPoint.y - point.y
+        plane.rotation.x = heightDiff * 0.3
+      }
+    }
+  })
+  
+  // 更新流动粒子
+  if (flightRoutesGroup) {
+    flightRoutesGroup.children.forEach(child => {
+      if (child instanceof THREE.Points && child.userData.curve) {
+        const positions = child.geometry.attributes.position.array
+        const curve = child.userData.curve
+        const offset = (time * 0.1 + child.userData.offset) % 1
+        
+        for (let i = 0; i < positions.length / 3; i++) {
+          const t = (i / (positions.length / 3) + offset) % 1
+          const point = curve.getPoint(t)
+          positions[i * 3] = point.x
+          positions[i * 3 + 1] = point.y
+          positions[i * 3 + 2] = point.z
+        }
+        child.geometry.attributes.position.needsUpdate = true
+      }
+    })
+  }
   
   // 动态调整网格透明度
   if (gridHelper && showGrid.value) {
@@ -891,6 +1209,10 @@ const animate = () => {
   }
   
   controls.update()
+  
+  // 确保相机矩阵是最新的
+  camera.updateMatrixWorld()
+  
   renderer.render(scene, camera)
   labelRenderer.render(scene, camera)
 }
@@ -980,5 +1302,37 @@ onUnmounted(() => {
 .controls button.active {
   background: rgba(0, 170, 255, 0.6);
   box-shadow: 0 0 10px rgba(0, 170, 255, 0.5);
+}
+
+/* 飞机图标样式 */
+:deep(.plane-icon) {
+  animation: planePulse 2s ease-in-out infinite;
+  position: relative !important;
+  z-index: 1000;
+}
+
+@keyframes planePulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.9;
+  }
+}
+
+:deep(.plane-icon svg) {
+  display: block;
+}
+
+/* 确保 CSS2DRenderer 的容器正确定位 */
+:deep(.css2d-container) {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  pointer-events: none !important;
 }
 </style>
