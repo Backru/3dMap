@@ -1,27 +1,215 @@
 <template>
   <div class="map-container" ref="mapContainer">
-    <div class="controls">
-      <button @click="toggleBarChart" :class="{ active: showBarChart }">柱状图特效</button>
-      <button @click="toggleSideEffect" :class="{ active: showSideEffect }">侧边光效</button>
-      <button @click="toggleGroundEffect" :class="{ active: showGroundEffect }">地面扩散</button>
-      <button @click="toggleGearEffect" :class="{ active: showGear }">光圈特效</button>
-      <button @click="toggleFlightRoutes" :class="{ active: showFlightRoutes }">飞机航线</button>
-      <button @click="toggleGrid" :class="{ active: showGrid }">辅助网格</button>
-      <button @click="togglePanMode" :class="{ active: isPanMode }">{{ isPanMode ? '拖动模式' : '旋转模式' }}</button>
-      
-      <div class="divider"></div>
-      
-      <select v-model="selectedProvince" @change="onProvinceChange">
-        <option value="">选择省份</option>
-        <option v-for="p in provinceList" :key="p" :value="p">{{ p }}</option>
-      </select>
-      
-      <select v-if="cityList.length > 0" v-model="selectedCity" @change="onCityChange">
-        <option value="">选择区县</option>
-        <option v-for="c in cityList" :key="c.name" :value="c.name">{{ c.name }}</option>
-      </select>
+    <!-- 顶部进入城市孪生按钮 - 在市级地图或直辖市时显示 -->
+    <div class="top-action-bar" v-if="(mapLevel === 'city' && selectedCity) || (mapLevel === 'province' && isDirectMunicipality)">
+      <button class="enter-city-twin-btn" @click="enterCityTwinFromTop">
+        <span class="icon">🏙️</span>
+        <span>进入 {{ selectedCity || selectedProvince }} 数字孪生</span>
+      </button>
+    </div>
 
-      <button @click="resetView">全部</button>
+    <div class="controls">
+      <!-- 视觉特效下拉菜单 -->
+      <div class="dropdown" ref="effectsDropdown">
+        <button 
+          class="dropdown-btn" 
+          @click="toggleDropdown('effects')"
+          :class="{ active: openDropdown === 'effects' }"
+        >
+          <span>✨ 视觉特效</span>
+          <span class="badge" v-if="activeEffectsCount > 0">{{ activeEffectsCount }}</span>
+          <span class="arrow" :class="{ open: openDropdown === 'effects' }">▼</span>
+        </button>
+        <div class="dropdown-menu" v-show="openDropdown === 'effects'">
+          <button @click="toggleBarChart" :class="{ active: showBarChart }">
+            <span class="icon">📊</span> 柱状图特效
+          </button>
+          <button @click="toggleSideEffect" :class="{ active: showSideEffect }">
+            <span class="icon">✨</span> 侧边光效
+          </button>
+          <button @click="toggleGroundEffect" :class="{ active: showGroundEffect }">
+            <span class="icon">💫</span> 地面扩散
+          </button>
+          <button @click="toggleGearEffect" :class="{ active: showGear }">
+            <span class="icon">⭕</span> 光圈特效
+          </button>
+        </div>
+      </div>
+
+      <!-- 导航控制下拉菜单 -->
+      <div class="dropdown" ref="navDropdown">
+        <button 
+          class="dropdown-btn" 
+          @click="toggleDropdown('navigation')"
+          :class="{ active: openDropdown === 'navigation' }"
+        >
+          <span>🧭 导航控制</span>
+          <span class="badge" v-if="activeNavCount > 0">{{ activeNavCount }}</span>
+          <span class="arrow" :class="{ open: openDropdown === 'navigation' }">▼</span>
+        </button>
+        <div class="dropdown-menu" v-show="openDropdown === 'navigation'">
+          <button @click="toggleFlightRoutes" :class="{ active: showFlightRoutes }">
+            <span class="icon">✈️</span> 飞机航线
+          </button>
+          <button @click="toggleGrid" :class="{ active: showGrid }">
+            <span class="icon">📐</span> 辅助网格
+          </button>
+          <button @click="togglePanMode" :class="{ active: isPanMode }">
+            <span class="icon">🖱️</span> {{ isPanMode ? '拖动模式' : '旋转模式' }}
+          </button>
+        </div>
+      </div>
+
+      <!-- 区域选择下拉菜单 -->
+      <div class="dropdown" ref="regionDropdown">
+        <button 
+          class="dropdown-btn" 
+          @click="toggleDropdown('region')"
+          :class="{ active: openDropdown === 'region' }"
+        >
+          <span>🗺️ 区域选择</span>
+          <span class="arrow" :class="{ open: openDropdown === 'region' }">▼</span>
+        </button>
+        <div class="dropdown-menu" v-show="openDropdown === 'region'">
+          <div class="select-wrapper">
+            <label>选择省份</label>
+            <select v-model="selectedProvince" @change="onProvinceChange">
+              <option value="">全国</option>
+              <option v-for="p in provinceList" :key="p" :value="p">{{ p }}</option>
+            </select>
+          </div>
+          
+          <div class="select-wrapper" v-if="cityList.length > 0">
+            <label>选择区县</label>
+            <select v-model="selectedCity" @change="onCityChange">
+              <option value="">全部</option>
+              <option v-for="c in cityList" :key="c.name" :value="c.name">{{ c.name }}</option>
+            </select>
+          </div>
+
+          <button @click="resetView" class="reset-btn">
+            <span class="icon">🏠</span> 返回全国
+          </button>
+        </div>
+      </div>
+
+      <!-- 数据分类下拉菜单 -->
+      <div class="dropdown" ref="dataDropdown">
+        <button 
+          class="dropdown-btn" 
+          @click="toggleDropdown('data')"
+          :class="{ active: openDropdown === 'data' }"
+        >
+          <span>📈 数据展示</span>
+          <span class="arrow" :class="{ open: openDropdown === 'data' }">▼</span>
+        </button>
+        <div class="dropdown-menu" v-show="openDropdown === 'data'">
+          <button @click="toggleDataCard" :class="{ active: showDataCard }">
+            <span class="icon">💳</span> 数据卡片
+          </button>
+          <button @click="toggleHeatmap" :class="{ active: showHeatmap }">
+            <span class="icon">🌡️</span> 热力图
+          </button>
+          <button @click="toggleRanking" :class="{ active: showRanking }">
+            <span class="icon">🏆</span> 排行榜
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 省份数据卡片 -->
+    <div 
+      v-if="showDataCard && hoveredProvinceData" 
+      class="data-card"
+      :style="{ left: cardPosition.x + 'px', top: cardPosition.y + 'px' }"
+      @mouseenter="onCardMouseEnter"
+      @mouseleave="onCardMouseLeave"
+    >
+      <div class="card-header">
+        <h3>{{ hoveredProvinceData.name }}</h3>
+        <div class="card-close" @click="hideDataCard">✕</div>
+      </div>
+      
+      <div class="card-body">
+        <div class="data-item">
+          <span class="data-label">💰 GDP总量</span>
+          <span class="data-value">{{ hoveredProvinceData.data.gdp }}</span>
+        </div>
+        <div class="data-item">
+          <span class="data-label">👥 人口</span>
+          <span class="data-value">{{ hoveredProvinceData.data.population }}</span>
+        </div>
+        <div class="data-item">
+          <span class="data-label">📊 增长率</span>
+          <span class="data-value growth">{{ hoveredProvinceData.data.growth }}</span>
+        </div>
+        <div class="data-item">
+          <span class="data-label">🏭 主导产业</span>
+          <span class="data-value">{{ hoveredProvinceData.data.industry }}</span>
+        </div>
+        <div class="divider-line"></div>
+        <div class="data-item">
+          <span class="data-label">🌡️ 实时温度</span>
+          <span class="data-value">{{ hoveredProvinceData.data.temperature }}</span>
+        </div>
+        <div class="data-item">
+          <span class="data-label">🌫️ 空气质量</span>
+          <span class="data-value">{{ hoveredProvinceData.data.aqi }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 排行榜面板 -->
+    <div v-if="showRanking" class="ranking-panel">
+      <div class="ranking-header">
+        <h3>🏆 {{ rankingTitle }}</h3>
+        <div class="ranking-tabs">
+          <button 
+            @click="rankingType = 'gdp'" 
+            :class="{ active: rankingType === 'gdp' }"
+          >
+            GDP
+          </button>
+          <button 
+            @click="rankingType = 'population'" 
+            :class="{ active: rankingType === 'population' }"
+          >
+            人口
+          </button>
+          <button 
+            @click="rankingType = 'growth'" 
+            :class="{ active: rankingType === 'growth' }"
+          >
+            增长率
+          </button>
+        </div>
+        <div class="ranking-close" @click="showRanking = false">✕</div>
+      </div>
+      <div class="ranking-body">
+        <div 
+          v-for="(item, index) in rankedList" 
+          :key="item.name"
+          class="ranking-item"
+          :class="{ 
+            'top-1': index === 0, 
+            'top-2': index === 1, 
+            'top-3': index === 2 
+          }"
+        >
+          <div class="rank-number">
+            <span v-if="index < 3" class="medal">{{ ['🥇', '🥈', '🥉'][index] }}</span>
+            <span v-else class="rank-text">{{ index + 1 }}</span>
+          </div>
+          <div class="rank-name">{{ item.name }}</div>
+          <div class="rank-value">{{ item.value }}</div>
+          <div class="rank-bar">
+            <div 
+              class="rank-bar-fill" 
+              :style="{ width: item.percentage + '%' }"
+            ></div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -36,6 +224,10 @@ import { loadChinaGeoJSON, loadProvinceGeoJSON, loadCityGeoJSON } from '../utils
 import { getAdcode } from '../utils/adcodes'
 import { createSideMaterial, createBarMaterial, createGroundMaterial, createTerrainMaterial, createGearMaterial } from '../shaders/mapEffects.js'
 import { getBarData } from '../data/barData.js'
+import { getRegionData } from '../data/provinceData.js'
+
+// 定义 emit 事件
+const emit = defineEmits(['enter-city'])
 
 const mapContainer = ref(null)
 let scene, camera, renderer, labelRenderer, controls
@@ -66,12 +258,368 @@ const showFlightRoutes = ref(false) // 飞机航线开关 - 默认关闭
 let flightRoutesGroup = null
 const flightPlanes = [] // 存储所有飞机对象
 
+// 下拉菜单状态
+const openDropdown = ref(null)
+
+// 数据展示相关
+const showDataCard = ref(true) // 默认开启数据卡片
+const showHeatmap = ref(false)
+const showRanking = ref(false)
+const hoveredProvinceData = ref(null)
+const cardPosition = ref({ x: 0, y: 0 })
+const isCardHovered = ref(false) // 卡片是否被鼠标悬停
+let cardHideTimer = null // 卡片隐藏定时器
+
+// 排行榜相关
+const rankingType = ref('gdp') // gdp, population, growth
+const rankingTitle = computed(() => {
+  const titles = {
+    'nation': '全国省份排行',
+    'province': '省内城市排行',
+    'city': '市内区县排行'
+  }
+  return titles[mapLevel.value] || '数据排行'
+})
+
+// 判断是否为直辖市
+const isDirectMunicipality = computed(() => {
+  const municipalities = ['北京市', '上海市', '天津市', '重庆市']
+  return municipalities.includes(selectedProvince.value)
+})
+
+// 计算排行榜数据
+const rankedList = computed(() => {
+  let regions = []
+  
+  // 根据当前地图层级获取区域列表
+  if (mapLevel.value === 'nation') {
+    regions = provinceList.value.map(name => ({
+      name,
+      data: getRegionData(name, 'province')
+    }))
+  } else if (mapLevel.value === 'province') {
+    regions = cityList.value.map(city => ({
+      name: city.name,
+      data: getRegionData(city.name, 'city')
+    }))
+  } else if (mapLevel.value === 'city') {
+    // 区县级别，从当前显示的区县中获取
+    if (currentCityGroup) {
+      const districtNames = []
+      currentCityGroup.children.forEach(child => {
+        if (child.name && child.type === 'Group') {
+          districtNames.push(child.name)
+        }
+      })
+      regions = districtNames.map(name => ({
+        name,
+        data: getRegionData(name, 'district')
+      }))
+    }
+  }
+  
+  // 根据排序类型提取数值并排序
+  const extractValue = (dataStr) => {
+    if (!dataStr) return 0
+    // 移除单位和符号，提取数字
+    const numStr = dataStr.replace(/[^0-9.]/g, '')
+    return parseFloat(numStr) || 0
+  }
+  
+  let sortedRegions = []
+  
+  if (rankingType.value === 'gdp') {
+    sortedRegions = regions.sort((a, b) => {
+      const aVal = extractValue(a.data.gdp)
+      const bVal = extractValue(b.data.gdp)
+      return bVal - aVal
+    })
+  } else if (rankingType.value === 'population') {
+    sortedRegions = regions.sort((a, b) => {
+      const aVal = extractValue(a.data.population)
+      const bVal = extractValue(b.data.population)
+      return bVal - aVal
+    })
+  } else if (rankingType.value === 'growth') {
+    sortedRegions = regions.sort((a, b) => {
+      const aVal = extractValue(a.data.growth)
+      const bVal = extractValue(b.data.growth)
+      return bVal - aVal
+    })
+  }
+  
+  // 取前10名
+  const top10 = sortedRegions.slice(0, 10)
+  
+  // 计算百分比（用于进度条）
+  const maxValue = top10.length > 0 ? extractValue(
+    rankingType.value === 'gdp' ? top10[0].data.gdp :
+    rankingType.value === 'population' ? top10[0].data.population :
+    top10[0].data.growth
+  ) : 1
+  
+  return top10.map(region => ({
+    name: region.name,
+    value: rankingType.value === 'gdp' ? region.data.gdp :
+           rankingType.value === 'population' ? region.data.population :
+           region.data.growth,
+    percentage: (extractValue(
+      rankingType.value === 'gdp' ? region.data.gdp :
+      rankingType.value === 'population' ? region.data.population :
+      region.data.growth
+    ) / maxValue * 100).toFixed(1)
+  }))
+})
+
+// 计算激活的特效数量
+const activeEffectsCount = computed(() => {
+  let count = 0
+  if (showBarChart.value) count++
+  if (showSideEffect.value) count++
+  if (showGroundEffect.value) count++
+  if (showGear.value) count++
+  return count
+})
+
+// 计算激活的导航控制数量
+const activeNavCount = computed(() => {
+  let count = 0
+  if (showFlightRoutes.value) count++
+  if (showGrid.value) count++
+  return count
+})
+
+// 切换下拉菜单
+const toggleDropdown = (dropdown) => {
+  if (openDropdown.value === dropdown) {
+    openDropdown.value = null
+  } else {
+    openDropdown.value = dropdown
+  }
+}
+
+// 点击外部关闭下拉菜单
+const handleClickOutside = (event) => {
+  const dropdowns = document.querySelectorAll('.dropdown')
+  let clickedInside = false
+  
+  dropdowns.forEach(dropdown => {
+    if (dropdown.contains(event.target)) {
+      clickedInside = true
+    }
+  })
+  
+  if (!clickedInside) {
+    openDropdown.value = null
+  }
+}
+
+// 切换数据卡片
+const toggleDataCard = () => {
+  showDataCard.value = !showDataCard.value
+  if (!showDataCard.value) {
+    hoveredProvinceData.value = null
+  }
+}
+
+// 切换热力图
+const toggleHeatmap = () => {
+  showHeatmap.value = !showHeatmap.value
+  // TODO: 实现热力图功能
+}
+
+// 切换排行榜
+const toggleRanking = () => {
+  showRanking.value = !showRanking.value
+}
+
+
+// 隐藏数据卡片
+const hideDataCard = () => {
+  hoveredProvinceData.value = null
+  isCardHovered.value = false
+  if (cardHideTimer) {
+    clearTimeout(cardHideTimer)
+    cardHideTimer = null
+  }
+}
+
+// 卡片鼠标进入
+const onCardMouseEnter = () => {
+  isCardHovered.value = true
+  if (cardHideTimer) {
+    clearTimeout(cardHideTimer)
+    cardHideTimer = null
+  }
+}
+
+// 卡片鼠标离开
+const onCardMouseLeave = () => {
+  isCardHovered.value = false
+  // 延迟隐藏，给用户时间移回地图
+  cardHideTimer = setTimeout(() => {
+    if (!isCardHovered.value) {
+      hoveredProvinceData.value = null
+    }
+  }, 300)
+}
+
+// 进入城市孪生
+const enterCityTwin = (cityName) => {
+  console.log('进入城市孪生:', cityName)
+  emit('enter-city', cityName)
+}
+
+// 从顶部按钮进入城市孪生（使用当前选中的城市）
+const enterCityTwinFromTop = () => {
+  if (selectedCity.value) {
+    // 使用当前选中的市
+    enterCityTwin(selectedCity.value)
+  } else if (selectedProvince.value) {
+    // 如果是直辖市，使用省份名称
+    enterCityTwin(selectedProvince.value)
+  }
+}
+
+// 检查WebGL支持 - 增强版诊断（绕过扩展干扰）
+const checkWebGLSupport = () => {
+  try {
+    const canvas = document.createElement('canvas')
+    
+    // 尝试多种WebGL上下文选项，绕过扩展拦截
+    const contextOptions = [
+      { alpha: false, antialias: true, preserveDrawingBuffer: false },
+      { alpha: false, antialias: false },
+      { failIfMajorPerformanceCaveat: false },
+      {} // 空配置
+    ]
+    
+    let gl = null
+    
+    // 尝试webgl2
+    for (const options of contextOptions) {
+      gl = canvas.getContext('webgl2', options)
+      if (gl) {
+        console.log('✅ WebGL2可用，使用配置:', options)
+        break
+      }
+    }
+    
+    // 如果webgl2失败，尝试webgl
+    if (!gl) {
+      for (const options of contextOptions) {
+        gl = canvas.getContext('webgl', options) || canvas.getContext('experimental-webgl', options)
+        if (gl) {
+          console.log('✅ WebGL可用，使用配置:', options)
+          break
+        }
+      }
+    }
+    
+    if (!gl) {
+      console.error('❌ WebGL上下文创建失败')
+      console.log('浏览器信息:', navigator.userAgent)
+      console.log('可用的canvas上下文:', canvas.getContext ? '是' : '否')
+      
+      // 检查是否是扩展干扰
+      console.warn('⚠️ 提示：如果你安装了Vue DevTools或其他开发工具扩展，它们可能会干扰WebGL')
+      console.warn('⚠️ 请尝试：1) 禁用浏览器扩展 2) 使用无痕模式 3) 刷新页面')
+      
+      return false
+    }
+    
+    // 获取WebGL信息
+    console.log('WebGL版本:', gl.getParameter(gl.VERSION))
+    console.log('WebGL供应商:', gl.getParameter(gl.VENDOR))
+    console.log('WebGL渲染器:', gl.getParameter(gl.RENDERER))
+    console.log('最大纹理尺寸:', gl.getParameter(gl.MAX_TEXTURE_SIZE))
+    
+    return true
+  } catch (e) {
+    console.error('WebGL检查异常:', e)
+    console.error('错误堆栈:', e.stack)
+    return false
+  }
+}
+
 // 初始化 Three.js
 const initThree = () => {
   if (!mapContainer.value) {
     console.error('Map container not found!')
     return
   }
+  
+  // 检查WebGL支持
+  if (!checkWebGLSupport()) {
+    console.error('WebGL不被支持')
+    console.log('🔍 诊断信息：')
+    console.log('- 浏览器:', navigator.userAgent)
+    console.log('- 平台:', navigator.platform)
+    console.log('- 在线状态:', navigator.onLine)
+    
+    // 尝试获取更多WebGL错误信息
+    const testCanvas = document.createElement('canvas')
+    const testGl = testCanvas.getContext('webgl', { failIfMajorPerformanceCaveat: false })
+    console.log('- WebGL上下文:', testGl ? '可创建' : '无法创建')
+    
+    const errorDiv = document.createElement('div')
+    errorDiv.style.cssText = `
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(20, 20, 20, 0.95);
+      color: white;
+      padding: 30px;
+      border-radius: 12px;
+      text-align: center;
+      z-index: 9999;
+      max-width: 500px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+      border: 2px solid #ff4444;
+    `
+    errorDiv.innerHTML = `
+      <h3 style="margin: 0 0 15px 0; color: #ff6666;">⚠️ WebGL不可用</h3>
+      <p style="margin: 10px 0; line-height: 1.6;">您的浏览器无法启用WebGL，这可能是由于以下原因：</p>
+      
+      <div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; margin: 15px 0; text-align: left;">
+        <p style="margin: 5px 0; font-size: 14px;"><strong>快速解决方案：</strong></p>
+        <ol style="margin: 10px 0; padding-left: 20px; font-size: 13px; line-height: 1.8;">
+          <li>打开 <code style="background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 3px;">chrome://settings/system</code></li>
+          <li>开启"使用硬件加速模式"</li>
+          <li>重启浏览器</li>
+        </ol>
+      </div>
+      
+      <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; margin: 15px 0; text-align: left;">
+        <p style="margin: 5px 0; font-size: 14px;"><strong>其他可能的解决方法：</strong></p>
+        <ul style="margin: 10px 0; padding-left: 20px; font-size: 13px; line-height: 1.8;">
+          <li>访问 <code style="background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 3px;">chrome://gpu</code> 查看GPU状态</li>
+          <li>更新显卡驱动程序</li>
+          <li>更新Chrome到最新版本</li>
+          <li>检查是否在虚拟机中运行</li>
+        </ul>
+      </div>
+      
+      <p style="margin-top: 15px; font-size: 12px; color: #aaa;">
+        测试WebGL: <a href="https://get.webgl.org/" target="_blank" style="color: #66ccff;">https://get.webgl.org/</a>
+      </p>
+      
+      <button onclick="window.location.reload()" style="
+        margin-top: 15px;
+        padding: 10px 20px;
+        background: #4CAF50;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+      ">重新加载页面</button>
+    `
+    mapContainer.value.appendChild(errorDiv)
+    return
+  }
+  
   const width = mapContainer.value.clientWidth
   const height = mapContainer.value.clientHeight
   console.log(`Map container size: ${width}x${height}`)
@@ -96,10 +644,112 @@ const initThree = () => {
   camera.position.set(0, 40, 40) // 调整为适合俯视的距离
   camera.lookAt(0, 0, 0)
 
-  // 渲染器
-  renderer = new THREE.WebGLRenderer({ antialias: true })
-  renderer.setSize(width, height)
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)) 
+  // 渲染器 - 添加错误处理和多种配置尝试（绕过扩展干扰）
+  const rendererConfigs = [
+    // 配置1: 标准配置
+    { 
+      antialias: true,
+      alpha: false,
+      powerPreference: 'high-performance',
+      failIfMajorPerformanceCaveat: false,
+      preserveDrawingBuffer: false
+    },
+    // 配置2: 基础配置
+    { 
+      antialias: false,
+      alpha: false,
+      failIfMajorPerformanceCaveat: false
+    },
+    // 配置3: 最小配置
+    {
+      failIfMajorPerformanceCaveat: false
+    },
+    // 配置4: 空配置
+    {}
+  ]
+  
+  let rendererCreated = false
+  
+  for (let i = 0; i < rendererConfigs.length; i++) {
+    try {
+      console.log(`尝试创建渲染器，配置 ${i + 1}:`, rendererConfigs[i])
+      renderer = new THREE.WebGLRenderer(rendererConfigs[i])
+      renderer.setSize(width, height)
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+      console.log(`✅ 渲染器创建成功，使用配置 ${i + 1}`)
+      rendererCreated = true
+      break
+    } catch (error) {
+      console.warn(`配置 ${i + 1} 失败:`, error.message)
+      if (i === rendererConfigs.length - 1) {
+        console.error('❌ 所有渲染器配置都失败了')
+        console.error('最后的错误:', error)
+        console.error('错误堆栈:', error.stack)
+        
+        // 显示错误信息给用户
+        const errorDiv = document.createElement('div')
+        errorDiv.style.cssText = `
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          background: rgba(20, 20, 20, 0.95);
+          color: white;
+          padding: 30px;
+          border-radius: 12px;
+          text-align: center;
+          z-index: 9999;
+          max-width: 500px;
+          box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+          border: 2px solid #ff4444;
+        `
+        errorDiv.innerHTML = `
+          <h3 style="margin: 0 0 15px 0; color: #ff6666;">⚠️ 渲染器创建失败</h3>
+          <p style="margin: 10px 0; line-height: 1.6;">可能是浏览器扩展干扰了WebGL</p>
+          
+          <div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; margin: 15px 0; text-align: left;">
+            <p style="margin: 5px 0; font-size: 14px;"><strong>🔧 快速解决：</strong></p>
+            <ol style="margin: 10px 0; padding-left: 20px; font-size: 13px; line-height: 1.8;">
+              <li><strong>禁用浏览器扩展</strong>（特别是Vue DevTools）</li>
+              <li>或使用<strong>无痕模式</strong>（Cmd+Shift+N）</li>
+              <li>刷新页面</li>
+            </ol>
+          </div>
+          
+          <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; margin: 15px 0; text-align: left;">
+            <p style="margin: 5px 0; font-size: 14px;"><strong>其他方法：</strong></p>
+            <ul style="margin: 10px 0; padding-left: 20px; font-size: 13px; line-height: 1.8;">
+              <li>打开 <code style="background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 3px;">chrome://settings/system</code> 开启硬件加速</li>
+              <li>访问 <code style="background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 3px;">chrome://gpu</code> 检查GPU状态</li>
+              <li>更新Chrome和显卡驱动</li>
+            </ul>
+          </div>
+          
+          <p style="margin-top: 10px; font-size: 12px; color: #ff9999;">
+            错误详情: ${error.message}
+          </p>
+          
+          <button onclick="window.location.reload()" style="
+            margin-top: 15px;
+            padding: 10px 20px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+          ">重新加载页面</button>
+        `
+        mapContainer.value.appendChild(errorDiv)
+        return
+      }
+    }
+  }
+  
+  if (!rendererCreated) {
+    console.error('渲染器创建失败，无法继续')
+    return
+  } 
   mapContainer.value.appendChild(renderer.domElement)
 
   // 标签渲染器
@@ -391,6 +1041,30 @@ const onMouseMove = (event) => {
           duration: 0.5,
           ease: 'power2.out'
         })
+        
+        // 显示数据卡片（所有层级都支持）
+        if (showDataCard.value) {
+          const regionName = object.name
+          // 根据当前地图层级获取对应的数据
+          let level = 'province'
+          if (mapLevel.value === 'province') {
+            level = 'city'
+          } else if (mapLevel.value === 'city') {
+            level = 'district'
+          }
+          
+          const data = getRegionData(regionName, level)
+          hoveredProvinceData.value = {
+            name: regionName,
+            data: data
+          }
+          
+          // 计算卡片位置（鼠标右侧偏移）
+          cardPosition.value = {
+            x: event.clientX + 20,
+            y: event.clientY - 100
+          }
+        }
       }
     }
   } else {
@@ -401,6 +1075,15 @@ const onMouseMove = (event) => {
         ease: 'power2.out'
       })
       hoveredProvince = null
+      
+      // 延迟隐藏数据卡片，给用户时间移动到卡片上
+      if (showDataCard.value && !isCardHovered.value) {
+        cardHideTimer = setTimeout(() => {
+          if (!isCardHovered.value) {
+            hoveredProvinceData.value = null
+          }
+        }, 200)
+      }
     }
   }
 }
@@ -428,14 +1111,18 @@ const onMapClick = (event) => {
       const name = object.name
       
       if (mapLevel.value === 'nation') {
+        // 全国地图：点击省份进入省级地图
         if (provinceList.value.includes(name)) {
           selectedProvince.value = name
           onProvinceChange()
         }
       } else if (mapLevel.value === 'province') {
-        // 点击市
+        // 省级地图：点击市进入市级地图
         selectedCity.value = name
         onCityChange()
+      } else if (mapLevel.value === 'city') {
+        // 市级地图：点击区县（暂时不做处理）
+        console.log('点击区县:', name)
       }
     }
   }
@@ -1232,6 +1919,7 @@ onMounted(() => {
   animate()
   window.addEventListener('resize', onWindowResize)
   window.addEventListener('mousemove', onMouseMove)
+  window.addEventListener('click', handleClickOutside)
   if (renderer && renderer.domElement) {
     renderer.domElement.addEventListener('click', onMapClick)
   }
@@ -1240,10 +1928,16 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('resize', onWindowResize)
   window.removeEventListener('mousemove', onMouseMove)
+  window.removeEventListener('click', handleClickOutside)
   if (renderer && renderer.domElement) {
     renderer.domElement.removeEventListener('click', onMapClick)
   }
-  // 清理资源...
+  // 清理定时器
+  if (cardHideTimer) {
+    clearTimeout(cardHideTimer)
+    cardHideTimer = null
+  }
+  // 清理其他资源...
 })
 </script>
 
@@ -1254,54 +1948,608 @@ onUnmounted(() => {
   position: relative;
 }
 
+/* 顶部操作栏 */
+.top-action-bar {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  animation: slideDown 0.5s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.enter-city-twin-btn {
+  background: linear-gradient(135deg, #00aaff, #00ffff);
+  border: none;
+  color: #000;
+  padding: 10px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0, 170, 255, 0.4),
+              0 0 20px rgba(0, 255, 255, 0.2);
+  position: relative;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.enter-city-twin-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+  transition: left 0.6s ease;
+}
+
+.enter-city-twin-btn:hover::before {
+  left: 100%;
+}
+
+.enter-city-twin-btn:hover {
+  background: linear-gradient(135deg, #00ccff, #00ffff);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 170, 255, 0.6),
+              0 0 30px rgba(0, 255, 255, 0.4);
+}
+
+.enter-city-twin-btn:active {
+  transform: translateY(0);
+}
+
+.enter-city-twin-btn .icon {
+  font-size: 18px;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
 .controls {
   position: absolute;
   top: 20px;
   left: 20px;
   z-index: 100;
   display: flex;
-  gap: 10px;
+  gap: 15px;
 }
 
-.controls button {
-  background: rgba(0, 0, 0, 0.5);
+/* 下拉菜单容器 */
+.dropdown {
+  position: relative;
+}
+
+/* 下拉按钮 */
+.dropdown-btn {
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(10px);
   border: 1px solid #00aaff;
   color: #fff;
-  padding: 8px 16px;
-  border-radius: 4px;
+  padding: 10px 20px;
+  border-radius: 8px;
   cursor: pointer;
   font-size: 14px;
-  transition: all 0.3s;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 170, 255, 0.2);
 }
 
-.controls button:hover {
+.dropdown-btn:hover {
   background: rgba(0, 170, 255, 0.3);
+  border-color: #00ccff;
+  box-shadow: 0 4px 12px rgba(0, 170, 255, 0.4);
+  transform: translateY(-1px);
 }
 
-.controls select {
-  background: rgba(0, 0, 0, 0.5);
+.dropdown-btn.active {
+  background: rgba(0, 170, 255, 0.4);
+  border-color: #00ffff;
+  box-shadow: 0 4px 16px rgba(0, 170, 255, 0.6);
+}
+
+/* 徽章 */
+.badge {
+  background: linear-gradient(135deg, #00ffff, #00aaff);
+  color: #000;
+  font-size: 11px;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 10px;
+  min-width: 18px;
+  text-align: center;
+  box-shadow: 0 0 8px rgba(0, 255, 255, 0.6);
+}
+
+/* 箭头 */
+.arrow {
+  font-size: 10px;
+  transition: transform 0.3s ease;
+  opacity: 0.7;
+}
+
+.arrow.open {
+  transform: rotate(180deg);
+}
+
+/* 下拉菜单 */
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  min-width: 200px;
+  background: rgba(2, 9, 18, 0.95);
+  backdrop-filter: blur(20px);
   border: 1px solid #00aaff;
+  border-radius: 8px;
+  padding: 8px;
+  box-shadow: 0 8px 32px rgba(0, 170, 255, 0.3);
+  animation: slideDown 0.3s ease;
+  z-index: 1000;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 下拉菜单内的按钮 */
+.dropdown-menu button {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(0, 170, 255, 0.3);
   color: #fff;
-  padding: 8px 16px;
-  border-radius: 4px;
+  padding: 10px 14px;
+  border-radius: 6px;
   cursor: pointer;
-  font-size: 14px;
-  transition: all 0.3s;
+  font-size: 13px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  text-align: left;
+}
+
+.dropdown-menu button:last-child {
+  margin-bottom: 0;
+}
+
+.dropdown-menu button:hover {
+  background: rgba(0, 170, 255, 0.2);
+  border-color: #00aaff;
+  transform: translateX(3px);
+}
+
+.dropdown-menu button.active {
+  background: rgba(0, 170, 255, 0.4);
+  border-color: #00ffff;
+  box-shadow: 0 0 12px rgba(0, 170, 255, 0.5);
+}
+
+.dropdown-menu button .icon {
+  font-size: 16px;
+  opacity: 0.9;
+}
+
+/* 选择器包装 */
+.select-wrapper {
+  margin-bottom: 10px;
+}
+
+.select-wrapper label {
+  display: block;
+  color: #00aaff;
+  font-size: 12px;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+.select-wrapper select {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(0, 170, 255, 0.5);
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s ease;
   outline: none;
 }
 
-.controls select:hover {
-  background: rgba(0, 170, 255, 0.3);
+.select-wrapper select:hover {
+  background: rgba(0, 170, 255, 0.2);
+  border-color: #00aaff;
 }
 
-.controls select option {
+.select-wrapper select:focus {
+  border-color: #00ffff;
+  box-shadow: 0 0 8px rgba(0, 170, 255, 0.4);
+}
+
+.select-wrapper select option {
   background: #020912;
   color: #fff;
+  padding: 8px;
 }
 
-.controls button.active {
-  background: rgba(0, 170, 255, 0.6);
-  box-shadow: 0 0 10px rgba(0, 170, 255, 0.5);
+/* 重置按钮 */
+.reset-btn {
+  background: rgba(255, 100, 100, 0.2) !important;
+  border-color: rgba(255, 100, 100, 0.5) !important;
+}
+
+.reset-btn:hover {
+  background: rgba(255, 100, 100, 0.3) !important;
+  border-color: rgba(255, 100, 100, 0.8) !important;
+}
+
+/* 数据卡片 */
+.data-card {
+  position: fixed;
+  min-width: 320px;
+  background: linear-gradient(135deg, rgba(2, 9, 18, 0.98), rgba(0, 50, 80, 0.95));
+  backdrop-filter: blur(20px);
+  border: 2px solid #00aaff;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 170, 255, 0.4), 
+              0 0 60px rgba(0, 170, 255, 0.2),
+              inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  z-index: 1000;
+  animation: cardFadeIn 0.3s ease;
+  pointer-events: auto; /* 确保卡片可以接收鼠标事件 */
+  cursor: default; /* 鼠标在卡片上显示默认光标 */
+}
+
+@keyframes cardFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(0, 170, 255, 0.3);
+  background: linear-gradient(90deg, rgba(0, 170, 255, 0.1), transparent);
+}
+
+/* 卡片中的按钮样式已移除，现在使用顶部按钮和直接点击 */
+
+.card-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #00ffff;
+  text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+}
+
+.card-close {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #fff;
+  opacity: 0.6;
+  transition: all 0.2s ease;
+  border-radius: 4px;
+  font-size: 18px;
+}
+
+.card-close:hover {
+  opacity: 1;
+  background: rgba(255, 100, 100, 0.2);
+  color: #ff6464;
+}
+
+.card-body {
+  padding: 16px 20px;
+}
+
+.data-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(0, 170, 255, 0.1);
+}
+
+.data-item:last-child {
+  border-bottom: none;
+}
+
+.data-label {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.data-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  text-align: right;
+}
+
+.data-value.growth {
+  color: #00ff88;
+  text-shadow: 0 0 8px rgba(0, 255, 136, 0.5);
+}
+
+.divider-line {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #00aaff, transparent);
+  margin: 12px 0;
+  box-shadow: 0 0 8px rgba(0, 170, 255, 0.3);
+}
+
+/* 旧的底部按钮样式（已移除，按钮现在在顶部） */
+
+/* 排行榜面板 */
+.ranking-panel {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  width: 380px;
+  max-height: calc(100vh - 40px);
+  background: linear-gradient(135deg, rgba(2, 9, 18, 0.98), rgba(0, 50, 80, 0.95));
+  backdrop-filter: blur(20px);
+  border: 2px solid #00aaff;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 170, 255, 0.4), 
+              0 0 60px rgba(0, 170, 255, 0.2);
+  z-index: 1000;
+  animation: slideInRight 0.3s ease;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(100px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.ranking-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(0, 170, 255, 0.3);
+  background: linear-gradient(90deg, rgba(0, 170, 255, 0.1), transparent);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.ranking-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #00ffff;
+  text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+  flex: 1;
+  min-width: 150px;
+}
+
+.ranking-tabs {
+  display: flex;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 4px;
+  border-radius: 6px;
+}
+
+.ranking-tabs button {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s ease;
+}
+
+.ranking-tabs button:hover {
+  color: #fff;
+  background: rgba(0, 170, 255, 0.2);
+}
+
+.ranking-tabs button.active {
+  color: #00ffff;
+  background: rgba(0, 170, 255, 0.4);
+  box-shadow: 0 0 8px rgba(0, 170, 255, 0.5);
+}
+
+.ranking-close {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #fff;
+  opacity: 0.6;
+  transition: all 0.2s ease;
+  border-radius: 4px;
+  font-size: 18px;
+}
+
+.ranking-close:hover {
+  opacity: 1;
+  background: rgba(255, 100, 100, 0.2);
+  color: #ff6464;
+}
+
+.ranking-body {
+  padding: 12px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.ranking-item {
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  grid-template-rows: auto auto;
+  gap: 8px;
+  padding: 12px;
+  margin-bottom: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(0, 170, 255, 0.2);
+  border-radius: 8px;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.ranking-item:hover {
+  background: rgba(0, 170, 255, 0.15);
+  border-color: #00aaff;
+  transform: translateX(5px);
+}
+
+.ranking-item.top-1 {
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.15), rgba(0, 0, 0, 0.3));
+  border-color: rgba(255, 215, 0, 0.5);
+}
+
+.ranking-item.top-2 {
+  background: linear-gradient(135deg, rgba(192, 192, 192, 0.15), rgba(0, 0, 0, 0.3));
+  border-color: rgba(192, 192, 192, 0.5);
+}
+
+.ranking-item.top-3 {
+  background: linear-gradient(135deg, rgba(205, 127, 50, 0.15), rgba(0, 0, 0, 0.3));
+  border-color: rgba(205, 127, 50, 0.5);
+}
+
+.rank-number {
+  grid-row: 1 / 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+}
+
+.rank-number .medal {
+  font-size: 32px;
+  filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.6));
+}
+
+.rank-number .rank-text {
+  font-size: 20px;
+  font-weight: bold;
+  color: #00aaff;
+}
+
+.rank-name {
+  grid-column: 2;
+  grid-row: 1;
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  display: flex;
+  align-items: center;
+}
+
+.rank-value {
+  grid-column: 3;
+  grid-row: 1;
+  font-size: 14px;
+  font-weight: 600;
+  color: #00ffff;
+  text-align: right;
+  display: flex;
+  align-items: center;
+}
+
+.rank-bar {
+  grid-column: 2 / 4;
+  grid-row: 2;
+  height: 6px;
+  background: rgba(0, 170, 255, 0.2);
+  border-radius: 3px;
+  overflow: hidden;
+  position: relative;
+}
+
+.rank-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #00aaff, #00ffff);
+  border-radius: 3px;
+  transition: width 0.5s ease;
+  box-shadow: 0 0 8px rgba(0, 255, 255, 0.6);
+  position: relative;
+}
+
+.rank-bar-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 /* 飞机图标样式 */
