@@ -1,12 +1,12 @@
 <template>
   <div class="map-container" ref="mapContainer">
     <!-- 顶部进入城市孪生按钮 - 在市级地图或直辖市时显示 -->
-    <div class="top-action-bar" v-if="(mapLevel === 'city' && selectedCity) || (mapLevel === 'province' && isDirectMunicipality)">
+    <!-- <div class="top-action-bar" v-if="(mapLevel === 'city' && selectedCity) || (mapLevel === 'province' && isDirectMunicipality)">
       <button class="enter-city-twin-btn" @click="enterCityTwinFromTop">
         <span class="icon">🏙️</span>
         <span>进入 {{ selectedCity || selectedProvince }} 数字孪生</span>
       </button>
-    </div>
+    </div> -->
 
     <div class="controls">
       <!-- 视觉特效下拉菜单 -->
@@ -115,6 +115,16 @@
           </button>
         </div>
       </div>
+
+      <!-- 汽车展厅按钮 -->
+      <button 
+        class="showroom-btn" 
+        @click="enterCarShowroom"
+        title="进入汽车展厅"
+      >
+        <span class="icon">🚗</span>
+        <span>汽车展厅</span>
+      </button>
     </div>
 
     <!-- 省份数据卡片 -->
@@ -227,7 +237,7 @@ import { getBarData } from '../data/barData.js'
 import { getRegionData } from '../data/provinceData.js'
 
 // 定义 emit 事件
-const emit = defineEmits(['enter-city'])
+const emit = defineEmits(['enter-city', 'enter-showroom'])
 
 const mapContainer = ref(null)
 let scene, camera, renderer, labelRenderer, controls
@@ -466,8 +476,14 @@ const onCardMouseLeave = () => {
 
 // 进入城市孪生
 const enterCityTwin = (cityName) => {
-  console.log('进入城市孪生:', cityName)
+  // console.log('进入城市孪生:', cityName)
   emit('enter-city', cityName)
+}
+
+// 进入汽车展厅
+const enterCarShowroom = () => {
+  // console.log('进入汽车展厅')
+  emit('enter-showroom')
 }
 
 // 从顶部按钮进入城市孪生（使用当前选中的城市）
@@ -500,7 +516,7 @@ const checkWebGLSupport = () => {
     for (const options of contextOptions) {
       gl = canvas.getContext('webgl2', options)
       if (gl) {
-        console.log('✅ WebGL2可用，使用配置:', options)
+        // console.log('✅ WebGL2可用，使用配置:', options)
         break
       }
     }
@@ -622,7 +638,7 @@ const initThree = () => {
   
   const width = mapContainer.value.clientWidth
   const height = mapContainer.value.clientHeight
-  console.log(`Map container size: ${width}x${height}`)
+  // console.log(`Map container size: ${width}x${height}`)
 
   // 初始化 Raycaster 和 Mouse
   raycaster = new THREE.Raycaster()
@@ -672,11 +688,11 @@ const initThree = () => {
   
   for (let i = 0; i < rendererConfigs.length; i++) {
     try {
-      console.log(`尝试创建渲染器，配置 ${i + 1}:`, rendererConfigs[i])
+      // console.log(`尝试创建渲染器，配置 ${i + 1}:`, rendererConfigs[i])
       renderer = new THREE.WebGLRenderer(rendererConfigs[i])
       renderer.setSize(width, height)
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-      console.log(`✅ 渲染器创建成功，使用配置 ${i + 1}`)
+      // console.log(`✅ 渲染器创建成功，使用配置 ${i + 1}`)
       rendererCreated = true
       break
     } catch (error) {
@@ -766,20 +782,20 @@ const initThree = () => {
   labelRenderer.domElement.style.overflow = 'visible'
   mapContainer.value.appendChild(labelRenderer.domElement)
   
-  console.log('labelRenderer 已创建:', labelRenderer.domElement)
-  console.log('labelRenderer 容器尺寸:', width, height)
+  // console.log('labelRenderer 已创建:', labelRenderer.domElement)
+  // console.log('labelRenderer 容器尺寸:', width, height)
   
   // 添加调试信息：检查 labelRenderer 是否正确渲染
   setTimeout(() => {
-    console.log('labelRenderer 子元素数量:', labelRenderer.domElement.children.length)
+    // console.log('labelRenderer 子元素数量:', labelRenderer.domElement.children.length)
     if (labelRenderer.domElement.children.length > 0) {
-      console.log('第一个子元素:', labelRenderer.domElement.children[0])
+      // console.log('第一个子元素:', labelRenderer.domElement.children[0])
       // 查找飞机图标元素
       const planeIcons = labelRenderer.domElement.querySelectorAll('.plane-icon')
-      console.log('找到飞机图标数量:', planeIcons.length)
+      // console.log('找到飞机图标数量:', planeIcons.length)
       if (planeIcons.length > 0) {
-        console.log('第一个飞机图标:', planeIcons[0])
-        console.log('飞机图标的父元素 style:', planeIcons[0].parentElement?.style.cssText)
+        // console.log('第一个飞机图标:', planeIcons[0])
+        // console.log('飞机图标的父元素 style:', planeIcons[0].parentElement?.style.cssText)
       }
     }
   }, 2000)
@@ -944,7 +960,7 @@ const renderMapData = (geoData, targetGroup, level = 'province') => {
 
 // 创建地图
 const createMap = async () => {
-  console.log('开始加载地图数据...')
+  // console.log('开始加载地图数据...')
   const geoData = await loadChinaGeoJSON()
   if (!geoData) {
     console.error('地图数据加载失败')
@@ -1122,7 +1138,7 @@ const onMapClick = (event) => {
         onCityChange()
       } else if (mapLevel.value === 'city') {
         // 市级地图：点击区县（暂时不做处理）
-        console.log('点击区县:', name)
+        // console.log('点击区县:', name)
       }
     }
   }
@@ -1138,7 +1154,7 @@ const onProvinceChange = async () => {
     return
   }
   
-  console.log(`切换省份: ${selectedProvince.value}, adcode: ${adcode}`)
+  // console.log(`切换省份: ${selectedProvince.value}, adcode: ${adcode}`)
   
   try {
     const provinceData = await loadProvinceGeoJSON(adcode)
@@ -1236,7 +1252,7 @@ const onCityChange = async () => {
     return
   }
   
-  console.log(`切换市: ${city.name}, adcode: ${city.adcode}`)
+  // console.log(`切换市: ${city.name}, adcode: ${city.adcode}`)
   
   try {
     const cityData = await loadCityGeoJSON(city.adcode)
@@ -1634,7 +1650,7 @@ const createFlightRoutes = () => {
     flightPlanes.push(plane)
     flightRoutesGroup.add(plane)
     
-    console.log(`创建飞机: ${route.from} -> ${route.to}, 颜色: ${route.color.toString(16)}`)
+    // console.log(`创建飞机: ${route.from} -> ${route.to}, 颜色: ${route.color.toString(16)}`)
   })
   
   flightRoutesGroup.visible = showFlightRoutes.value
@@ -1648,7 +1664,7 @@ const createPlane = (color) => {
   // 转换颜色为 CSS 格式
   const colorHex = '#' + color.toString(16).padStart(6, '0')
   
-  console.log('创建飞机图标, 颜色:', colorHex)
+  // console.log('创建飞机图标, 颜色:', colorHex)
   
   // 创建 Canvas 来绘制飞机图标
   const canvas = document.createElement('canvas')
@@ -1685,7 +1701,7 @@ const createPlane = (color) => {
   planeGroup.userData.sprite = sprite
   planeGroup.userData.texture = texture
   
-  console.log('飞机图标创建完成, Sprite:', sprite)
+  // console.log('飞机图标创建完成, Sprite:', sprite)
   
   // 添加光晕效果
   const glowGeometry = new THREE.SphereGeometry(0.6, 16, 16)
@@ -1816,11 +1832,11 @@ const animate = () => {
         
         // 调试：偶尔输出角度信息
         if (Math.random() < 0.005) {
-          console.log(`飞机 ${index}:`, {
-            tangent: { x: tangent.x.toFixed(2), z: tangent.z.toFixed(2) },
-            flightAngle: (flightAngle * 180 / Math.PI).toFixed(1) + '°',
-            rotationRad: (rotationRad * 180 / Math.PI).toFixed(1) + '°'
-          })
+          // console.log(`飞机 ${index}:`, {
+          //   tangent: { x: tangent.x.toFixed(2), z: tangent.z.toFixed(2) },
+          //   flightAngle: (flightAngle * 180 / Math.PI).toFixed(1) + '°',
+          //   rotationRad: (rotationRad * 180 / Math.PI).toFixed(1) + '°'
+          // })
         }
         
         // 重新绘制飞机图标
@@ -2582,5 +2598,55 @@ onUnmounted(() => {
   width: 100% !important;
   height: 100% !important;
   pointer-events: none !important;
+}
+
+/* 汽车展厅按钮 */
+.showroom-btn {
+  background: linear-gradient(135deg, #ff6b35, #ff8c42);
+  border: 2px solid #ff6b35;
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(255, 107, 53, 0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+.showroom-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  transition: left 0.6s ease;
+}
+
+.showroom-btn:hover::before {
+  left: 100%;
+}
+
+.showroom-btn:hover {
+  background: linear-gradient(135deg, #ff8c42, #ffa35c);
+  border-color: #ff8c42;
+  box-shadow: 0 4px 16px rgba(255, 107, 53, 0.5);
+  transform: translateY(-2px);
+}
+
+.showroom-btn:active {
+  transform: translateY(0);
+}
+
+.showroom-btn .icon {
+  font-size: 18px;
 }
 </style>
